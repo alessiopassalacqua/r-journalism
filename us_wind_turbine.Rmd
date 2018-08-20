@@ -1,0 +1,290 @@
+---
+title: "US Wind Turbine"
+author: "Alessio Passalacqua"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    number_sections: false
+    toc: true
+    toc_float: true
+    theme: cosmo
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+```
+
+
+
+# Motivation
+
+The US Wind turbine database provides onshore & offshore wind turbine locations in the United States, corresponding facility information, and turbine technical specifications.
+
+Database could be download from [here](https://eerscmap.usgs.gov/uswtdb/assets/data/uswtdbCSV.zip)
+
+The authors of database have created a web application called the US wind turbine database viewer available to the [link](https://eerscmap.usgs.gov/uswtdb/viewer/#3/37.25/-96.25).
+The viewer lets you visualize inspect and interact with the turbine database through web browser. 
+
+
+The goal of the analysis is to show the variation of capacity in time and highlight the contribution of each state. 
+
+In first part of the report, the total capacity is showed as a function of time and as a function of states.
+
+In the second part, the evolution of total capacity is showed on map. The final plot represents the total capacity by states in three different years 1998, 2008 and 2018.
+
+
+
+# Load library
+
+```{r}
+library(readr)    # load data in csv format
+library(viridis)  # color palettes
+library(dplyr)    # manipulate dataframe
+library(sf)       # manipulate shape file
+library(ggplot2)  # plot
+library(forcats)  # reorder factor levels
+library(datasets) # dataset of US state name
+library(leaflet)  # interactive maps
+library(DT)       # interactive table
+```
+
+# Load data
+
+
+Load the us wind turbine dataset:
+```{r}
+usw <- read_csv("uswtdb_v1_1_20180710.csv")
+```
+
+
+# Table
+
+```{r}
+usw_dt <- usw %>%
+  select(p_year,t_state,t_cap)
+datatable(usw_dt, extensions = 'Buttons', options = list(
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')
+  )
+)
+```
+
+
+# Total capacity as function of states and years
+
+Calculate the amount of total capacity added for each year:
+
+```{r}
+usw_year <- usw %>%
+  filter(t_cap > 0) %>% # remove t_cap negative value (aka missing) 
+  filter(p_year >0 ) %>% # remove p_year negative value (aka missing) 
+  group_by( p_year) %>%
+  summarise(totalcapacity = sum(t_cap)/1000000) #calculate the total capacity in GW
+```
+
+Plot total capacity using the `cumsum` function inside ggplot to calculate the cumulative value of total capacity:
+
+```{r}
+ggplot(data = usw_year, aes(x = p_year, y = cumsum(totalcapacity))) + geom_line() +
+    labs( x= "", y="Total Capacity [GW]",
+       title="US Wind Turbine Total Rated Capacity",
+       subtitle = "from 1981 to 2018",
+       caption="Source: U.S. Wind Turbine Database")+
+    theme_minimal() 
+```
+
+The total capacity has a sharp increase after 2006.
+
+Calculate total capacity in each states:
+
+
+```{r}
+usw_states <- usw %>%
+  filter(t_cap > 0) %>% # remove t_cap negative value (aka missing) 
+  filter(p_year >0 ) %>% # remove p_year negative value (aka missing) 
+  group_by( t_state) %>%
+  summarise(totalcapacity = sum(t_cap)/1000000) #calculate the total capacity in GW
+```
+
+Add state names to `usw_states` dataset by using `state` dataset loaded from `datasets` library:
+
+```{r}
+data(state)
+states <- cbind(state.name,state.abb)
+states <- rbind(states,c("Guam","GU"))
+states <- data.frame(rbind(states,c("Puerto Rico","PR")))
+
+# join by abbreviation name column
+usw_states <- left_join(usw_states, states,
+                          by=c("t_state"="state.abb"))
+
+```
+
+Plot the total capacity as function of states:
+
+```{r,fig.height=8,fig.width=11}
+ggplot(usw_states,
+       aes(x=totalcapacity, y=fct_reorder(state.name, totalcapacity, desc=TRUE))) +
+  geom_segment(  
+           aes(x = 0,
+           y=fct_reorder(state.name, totalcapacity, desc=TRUE),
+           xend = totalcapacity,
+           yend = fct_reorder(state.name, totalcapacity, desc=TRUE)),
+           color = "gray50") +
+           geom_point() +
+  labs(x="Total Rated Capacity [GW]", y="", 
+       title = "US Wind Turbine",
+       caption = "Source: U.S. Wind Turbine Database") +
+  theme_minimal() +
+  # NEW CODE BELOW
+  geom_text(aes(label=round(totalcapacity,1)), hjust=-.5) +
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(), 
+        axis.line = element_blank(),
+        axis.text.x = element_blank())
+```
+
+Texas has the higher value of total capacity, about 23 GW.
+
+# Choropleth map of US Wind turbine database
+
+## Load US map shape file
+
+The shape file could be download from the [Census](https://www.census.gov/geo/maps-data/data/tiger-cart-boundary.html) 
+
+Read the shape file of state boundaries:
+
+```{r}
+fifty_location <- "static_maps/data/cb_2017_us_state_20m/cb_2017_us_state_20m.shp"
+fifty_states <- st_read(fifty_location)
+```
+
+
+## Create dataset for different period
+
+### Wind turbine in 1998
+
+Create a dataframe referning to 1998:
+```{r}
+usw_tc98 <- usw %>%
+  filter(t_cap > 0) %>% # remove t_cap negative (aka missing) 
+  filter(p_year >0 & p_year <1999) %>% 
+  group_by(t_state) %>%
+  summarise(totalcapacity = sum(t_cap)/1000000) #calculate the total capacity in GW
+```
+
+Join shape file and usw in 1998:
+```{r}
+usw_tc98 <- left_join(fifty_states, usw_tc98,
+                          by=c("STUSPS"="t_state"))
+# Create column year and refered to 1998
+usw_tc98$Year <- "1998"
+```
+
+### Wind turbine in 2008
+
+Create a dataframe referning to 2008:
+```{r}
+usw_tc08 <- usw %>%
+  filter(t_cap > 0) %>%
+  filter(p_year > 0 & p_year < 2009) %>%
+  group_by(t_state) %>%
+  summarise(totalcapacity = sum(t_cap)/1000000) 
+```
+
+Join shape file and usw in 2008:
+```{r}
+usw_tc08 <- left_join(fifty_states, usw_tc08,
+                          by=c("STUSPS"="t_state"))
+
+usw_tc08$Year <- "2008"
+```
+
+### Wind turbine in 2018
+
+Create a dataframe referning to 2018:
+```{r}
+usw_tc18 <- usw %>%
+  filter(t_cap > 0) %>%
+  filter(p_year > 0) %>%
+  group_by(t_state) %>%
+  summarise(totalcapacity = sum(t_cap)/1000000)
+```
+
+Join shape file and usw in 2018:
+```{r}
+usw_tc18 <- left_join(fifty_states, usw_tc18,
+                          by=c("STUSPS"="t_state"))
+
+usw_tc18$Year <- "2018"
+```
+
+## Plot Maps
+
+Aggregate all the dataframes by row:
+```{r}
+usw_30y <- rbind(usw_tc98,usw_tc08,usw_tc18) 
+```
+
+Remove no contiguos states for more compact visualization:
+```{r}
+usw_30y <- usw_30y %>% 
+  filter(NAME!="Hawaii" & NAME!="Alaska" & NAME!="Puerto Rico")
+```
+
+Plot maps:
+
+```{r}
+ggplot(usw_30y) +
+  geom_sf(aes(fill=totalcapacity)) +
+  facet_wrap(~Year,ncol=2) +
+  labs(title="Wind Turbine Total Rated Capacity of 48 states",
+       subtitle = "for R for Journalists class",
+       caption="Source: U.S. Wind Turbine Database")+
+  scale_fill_viridis(direction=-1, name="GW") +
+  scale_color_viridis(direction=-1) +
+  theme_void() +
+  theme(panel.grid.major = element_line(colour = 'transparent'))
+```
+
+# Interactive choropleth map
+
+
+
+```{r}
+usw_tc18$totalcapacity <- ifelse(is.na(usw_tc18$totalcapacity),0,usw_tc18$totalcapacity) 
+pal <- colorNumeric("Oranges", domain=usw_tc18$totalcapacity)
+popup_sb <- paste0("Total Capacity: ", as.character(round(usw_tc18$totalcapacity,1)))
+
+leaflet() %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  setView(-98.483330, 38.712046, zoom = 4) %>% 
+  addPolygons(data = usw_tc18, 
+              fillColor = ~pal(usw_tc18$totalcapacity), 
+              fillOpacity = 0.7, 
+              weight = 0.2, 
+              smoothFactor = 0.2,
+              popup = ~popup_sb ) %>%
+  addLegend(pal = pal, 
+            values = usw_tc18$totalcapacity, 
+            position = "bottomright", 
+            title = "Total Capacity [GW]")
+```
+
+
+# Connect to terminal
+
+This lines of code was runned on terminal to connect the local repository to my Github repository
+
+-------------------------
+
+* `git init .` 
+* `git add .` 
+* `git commit -m "first commit"`
+* `git remote add origin https://github.com/alessiopassalacqua/r-journalism.git`
+* `git push -u origin master`
+
+
+-------------------------
