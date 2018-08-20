@@ -274,7 +274,7 @@ leaflet() %>%
 ```
 
 
-# Connect to terminal
+# Connect to Github repository
 
 This lines of code was runned on terminal to connect the local repository to my Github repository
 
