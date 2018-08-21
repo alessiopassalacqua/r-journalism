@@ -38,15 +38,15 @@ In the second part, the evolution of total capacity is showed on map. The final 
 # Load library
 
 ```{r}
-library(readr)    # load data in csv format
-library(viridis)  # color palettes
-library(dplyr)    # manipulate dataframe
-library(sf)       # manipulate shape file
-library(ggplot2)  # plot
-library(forcats)  # reorder factor levels
-library(datasets) # dataset of US state name
-library(leaflet)  # interactive maps
-library(DT)       # interactive table
+library(readr)       # load data in csv format
+library(viridis)     # color palettes
+library(dplyr)       # manipulate dataframe
+library(sf)          # manipulate shape file
+library(ggplot2)     # plot
+library(forcats)     # reorder factor levels
+library(datasets)    # dataset of US state name
+library(leaflet)     # interactive maps
+library(DT)          # interactive table
 ```
 
 # Load data
@@ -87,6 +87,8 @@ Plot total capacity using the `cumsum` function inside ggplot to calculate the c
 
 ```{r}
 ggplot(data = usw_year, aes(x = p_year, y = cumsum(totalcapacity))) + geom_line() +
+   geom_vline(xintercept = 2006, alpha=0.4,linetype = "dashed" ) +
+   annotate("text",x=2003,y=20,label="2006",hjust=0, colour = "gray") +
     labs( x= "", y="Total Capacity [GW]",
        title="US Wind Turbine Total Rated Capacity",
        subtitle = "from 1981 to 2018",
@@ -135,6 +137,7 @@ ggplot(usw_states,
            geom_point() +
   labs(x="Total Rated Capacity [GW]", y="", 
        title = "US Wind Turbine",
+       subtitle = "2018",
        caption = "Source: U.S. Wind Turbine Database") +
   theme_minimal() +
   # NEW CODE BELOW
