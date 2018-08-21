@@ -239,10 +239,10 @@ usw_30y <- usw_30y %>%
 
 Plot maps:
 
-```{r}
+```{r,fig.width=12}
 ggplot(usw_30y) +
   geom_sf(aes(fill=totalcapacity)) +
-  facet_wrap(~Year,ncol=2) +
+  facet_wrap(~Year,ncol=3) +
   labs(title="Wind Turbine Total Rated Capacity of 48 states",
        subtitle = "for R for Journalists class",
        caption="Source: U.S. Wind Turbine Database")+
